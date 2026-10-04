@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edible Oil Analysis</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+<div class="page">
+
+    <section class="hero">
+        <div class="grid-bg"></div>
+
+        <div class="hero-content">
+            <h1>Compare commercial edible oil samples against an Original Oil reference</h1>
+
+            <p>
+                Enter experimentally measured temperature, density and flow time
+                for a reference sample and any number of commercial samples.
+                The system calculates parameter-wise percentage differences,
+                overall deviation and similarity score, then ranks the samples.
+            </p>
+
+            <button class="primary-btn" onclick="scrollToAnalysis()">
+                Start Analysis
+            </button>
+
+            <button class="secondary-btn hidden" id="viewResultsBtn" onclick="scrollToResults()">
+                View Results
+            </button>
+        </div>
+
+        <div class="summary-home">
+
+            <div class="home-card">
+                <span>Samples Analyzed</span>
+                <strong id="homeSamples">0</strong>
+            </div>
+
+            <div class="home-card">
+                <span>Best Matching Sample</span>
+                <strong id="homeBest">—</strong>
+            </div>
+
+            <div class="home-card">
+                <span>Highest Similarity Score</span>
+                <strong id="homeScore">—</strong>
+            </div>
+
+        </div>
+    </section>
+
+
+    <section class="analysis-section" id="analysis">
+
+        <div class="card">
+            <h2>1 · Oil Selection</h2>
+
+            <label>Oil type</label>
+
+            <select id="oilType">
+                <option>Sunflower Oil</option>
+                <option>Groundnut Oil</option>
+                <option>Coconut Oil</option>
+                <option>Mustard Oil</option>
+                <option>Rice Bran Oil</option>
+                <option>Soybean Oil</option>
+                <option>Olive Oil</option>
+            </select>
+        </div>
+
+
+        <div class="card reference-card">
+
+            <h2>2 · Original Oil — Reference</h2>
+
+            <p class="description">
+                Baseline values used for every percentage-difference calculation.
+            </p>
+
+            <div class="input-group">
+                <label>Temperature (°C)</label>
+                <input type="number" id="refTemp" placeholder="0.00" step="0.01">
+            </div>
+
+            <div class="input-group">
+                <label>Density (g/mL)</label>
+                <input type="number" id="refDensity" placeholder="0.00" step="0.001">
+            </div>
+
+            <div class="input-group">
+                <label>Flow Time (s)</label>
+                <input type="number" id="refFlow" placeholder="0.00" step="0.01">
+            </div>
+
+        </div>
+
+
+        <div class="card">
+
+            <div class="section-header">
+                <h2>3 · Commercial Samples</h2>
+
+                <button class="add-btn" onclick="addSample()">
+                    + Add Sample
+                </button>
+            </div>
+
+            <div id="samplesContainer"></div>
+
+        </div>
+
+
+        <div class="action-buttons">
+
+            <button class="primary-btn analyze-btn" onclick="analyzeOils()">
+                Analyze Oils
+            </button>
+
+            <button class="reset-btn" onclick="resetAnalysis()">
+                ↻ Reset Analysis
+            </button>
+
+        </div>
+
+        <div class="new-analysis">
+            New Analysis
+        </div>
+
+    </section>
+
+
+    <section class="results-section hidden" id="results">
+
+        <div class="results-heading">
+
+            <h2>Results — <span id="resultOilName">Sunflower Oil</span></h2>
+
+            <div class="result-actions">
+                <button onclick="saveAnalysis()">▣ Save Analysis</button>
+                <button onclick="exportCSV()">↓ Export CSV</button>
+                <button class="primary-btn" onclick="generateReport()">▤ Generate Report</button>
+            </div>
+
+        </div>
+
+
+        <div class="result-summary">
+
+            <div class="result-card">
+                <span>Total Samples</span>
+                <strong id="totalSamples">0</strong>
+            </div>
+
+            <div class="result-card">
+                <span>Best Match</span>
+                <strong id="bestMatch">—</strong>
+            </div>
+
+            <div class="result-card">
+                <span>Best Similarity</span>
+                <strong id="bestSimilarity">—</strong>
+            </div>
+
+            <div class="result-card">
+                <span>Average Similarity</span>
+                <strong id="averageSimilarity">—</strong>
+            </div>
+
+            <div class="result-card">
+                <span>Largest Deviation Parameter</span>
+                <strong id="largestDeviation">—</strong>
+            </div>
+
+        </div>
+
+
+        <div class="closest-match">
+
+            <h3>🏆 Closest Match: <span id="closestName"></span></h3>
+
+            <div class="score">
+                Similarity Score:
+                <strong id="closestScore"></strong>
+            </div>
+
+            <p id="closestDescription"></p>
+
+        </div>
+
+
+        <div class="table-card">
+
+            <h2>Results Table</h2>
+
+            <div class="table-wrapper">
+
+                <table>
+
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Sample</th>
+                            <th>Temp. Diff</th>
+                            <th>Density Diff</th>
+                            <th>Flow Diff</th>
+                            <th>Similarity</th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="resultsTable"></tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+
+        <h2 class="section-title">Parameter Analysis</h2>
+
+        <div id="parameterAnalysis"></div>
+
+
+        <h2 class="section-title">Data Visualization</h2>
+
+
+        <div class="chart-card">
+
+            <h2>Original vs Commercial Sample — Temperature (°C)</h2>
+
+            <div class="chart-container">
+                <canvas id="temperatureChart"></canvas>
+            </div>
+
+        </div>
+
+
+        <div class="chart-card">
+
+            <h2>Original vs Commercial Sample — Density (g/mL)</h2>
+
+            <div class="chart-container">
+                <canvas id="densityChart"></canvas>
+            </div>
+
+        </div>
+
+
+        <div class="chart-card">
+
+            <h2>Original vs Commercial Sample — Flow Time (s)</h2>
+
+            <div class="chart-container">
+                <canvas id="flowChart"></canvas>
+            </div>
+
+        </div>
+
+
+        <div class="chart-card">
+
+            <h2>Similarity Score Ranking (%)</h2>
+
+            <div class="chart-container">
+                <canvas id="similarityChart"></canvas>
+            </div>
+
+        </div>
+
+
+        <div class="scientific-note">
+
+            <strong>Scientific note:</strong>
+
+            Similarity scores represent comparison of the measured experimental
+            parameters only. They do not independently establish oil purity,
+            authenticity, safety, or nutritional quality.
+
+        </div>
+
+    </section>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
