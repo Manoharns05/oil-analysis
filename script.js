@@ -1,47 +1,64 @@
+
+"use strict";
+
 let sampleCount = 0;
 let charts = {};
+let latestResults = null;
 
 function scrollToAnalysis() {
     document.getElementById("analysis").scrollIntoView({ behavior: "smooth" });
 }
 
 function scrollToResults() {
-    document.getElementById("results").scrollIntoView({ behavior: "smooth" });
+    const results = document.getElementById("results");
+
+    if (!results.classList.contains("hidden")) {
+        results.scrollIntoView({ behavior: "smooth" });
+    } else {
+        alert("Please analyze the samples first.");
+    }
 }
 
 function addSample() {
     sampleCount++;
 
     const container = document.getElementById("samplesContainer");
-
     const card = document.createElement("div");
+
     card.className = "sample-card";
-    card.dataset.sample = sampleCount;
 
     card.innerHTML = `
         <div class="sample-top">
             <span class="sample-number">Sample ${sampleCount}</span>
-            <button class="delete-btn" onclick="deleteSample(this)">🗑</button>
+            <button type="button" class="delete-btn"
+                aria-label="Delete sample"
+                onclick="deleteSample(this)">Delete</button>
         </div>
 
         <div class="input-group">
             <label>Sample name</label>
-            <input type="text" class="sample-name" value="Sample ${sampleCount}">
+            <input type="text" class="sample-name"
+                value="Sample ${sampleCount}" required>
         </div>
 
-        <div class="input-group">
-            <label>Temperature (°C)</label>
-            <input type="number" class="sample-temp" placeholder="0.00" step="0.01">
-        </div>
+        <div class="input-grid">
+            <div class="input-group">
+                <label>Temperature (°C)</label>
+                <input type="number" class="sample-temp"
+                    min="0" step="0.01" placeholder="e.g. 30.00" required>
+            </div>
 
-        <div class="input-group">
-            <label>Density (g/mL)</label>
-            <input type="number" class="sample-density" placeholder="0.00" step="0.001">
-        </div>
+            <div class="input-group">
+                <label>Density (g/mL)</label>
+                <input type="number" class="sample-density"
+                    min="0" step="0.001" placeholder="e.g. 0.867" required>
+            </div>
 
-        <div class="input-group">
-            <label>Flow Time (s)</label>
-            <input type="number" class="sample-flow" placeholder="0.00" step="0.01">
+            <div class="input-group">
+                <label>Viscosity (mPa·s)</label>
+                <input type="number" class="sample-flow"
+                    min="0" step="0.001" placeholder="Enter viscosity" required>
+            </div>
         </div>
     `;
 
@@ -58,53 +75,56 @@ function updateSampleNumbers() {
 
     cards.forEach((card, index) => {
         const number = index + 1;
-        card.dataset.sample = number;
-        card.querySelector(".sample-number").textContent = `Sample ${number}`;
-
         const nameInput = card.querySelector(".sample-name");
+        const oldName = nameInput.value.trim();
 
-        if (
-            nameInput.value.trim() === "" ||
-            /^Sample \d+$/.test(nameInput.value)
-        ) {
+        if (!oldName || /^Sample \d+$/.test(oldName)) {
             nameInput.value = `Sample ${number}`;
         }
+
+        card.querySelector(".sample-number").textContent =
+            `Sample ${number}`;
     });
 
     sampleCount = cards.length;
 }
 
+function readNumber(id) {
+    const input = document.getElementById(id);
+    const value = input.value.trim();
+
+    return value === "" ? NaN : Number(value);
+}
+
 function getReferenceValues() {
     return {
-        temperature: Number(document.getElementById("refTemp").value),
-        density: Number(document.getElementById("refDensity").value),
-        flow: Number(document.getElementById("refFlow").value)
+        temperature: readNumber("refTemp"),
+        density: readNumber("refDensity"),
+        viscosity: readNumber("refFlow")
     };
 }
 
 function getCommercialSamples() {
-    const cards = document.querySelectorAll(".sample-card");
-    const samples = [];
+    return Array.from(document.querySelectorAll(".sample-card")).map(
+        (card, index) => {
+            const name = card.querySelector(".sample-name").value.trim();
+            const temperature = card.querySelector(".sample-temp").value;
+            const density = card.querySelector(".sample-density").value;
+            const viscosity = card.querySelector(".sample-flow").value;
 
-    cards.forEach(card => {
-        const name = card.querySelector(".sample-name").value.trim();
-        const temperature = Number(card.querySelector(".sample-temp").value);
-        const density = Number(card.querySelector(".sample-density").value);
-        const flow = Number(card.querySelector(".sample-flow").value);
-
-        samples.push({
-            name: name || `Sample ${samples.length + 1}`,
-            temperature,
-            density,
-            flow
-        });
-    });
-
-    return samples;
+            return {
+                name: name || `Sample ${index + 1}`,
+                temperature: temperature.trim() === "" ? NaN : Number(temperature),
+                density: density.trim() === "" ? NaN : Number(density),
+                viscosity: viscosity.trim() === "" ? NaN : Number(viscosity)
+            };
+        }
+    );
 }
 
 function percentageDifference(reference, sample) {
     if (reference === 0) return 0;
+
     return Math.abs((sample - reference) / reference) * 100;
 }
 
@@ -115,14 +135,12 @@ function analyzeOils() {
     if (
         !Number.isFinite(reference.temperature) ||
         !Number.isFinite(reference.density) ||
-        !Number.isFinite(reference.flow)
+        !Number.isFinite(reference.viscosity) ||
+        reference.temperature <= 0 ||
+        reference.density <= 0 ||
+        reference.viscosity <= 0
     ) {
-        alert("Please enter all values for the Original Oil reference.");
-        return;
-    }
-
-    if (reference.temperature === 0 || reference.density === 0 || reference.flow === 0) {
-        alert("Original Oil reference values cannot be zero.");
+        alert("Please enter positive numeric values for all three Original Oil reference properties.");
         return;
     }
 
@@ -134,11 +152,23 @@ function analyzeOils() {
     const invalidSample = samples.find(sample =>
         !Number.isFinite(sample.temperature) ||
         !Number.isFinite(sample.density) ||
-        !Number.isFinite(sample.flow)
+        !Number.isFinite(sample.viscosity) ||
+        sample.temperature <= 0 ||
+        sample.density <= 0 ||
+        sample.viscosity <= 0
     );
 
     if (invalidSample) {
-        alert("Please enter all values for every commercial sample.");
+        alert(
+            `Please enter positive numeric temperature, density and viscosity values for "${invalidSample.name}".`
+        );
+        return;
+    }
+
+    const names = samples.map(sample => sample.name.toLowerCase());
+
+    if (new Set(names).size !== names.length) {
+        alert("Please give each commercial sample a unique name.");
         return;
     }
 
@@ -153,20 +183,20 @@ function analyzeOils() {
             sample.density
         );
 
-        const flowDiff = percentageDifference(
-            reference.flow,
-            sample.flow
+        const viscosityDiff = percentageDifference(
+            reference.viscosity,
+            sample.viscosity
         );
 
         const averageDeviation =
-            (temperatureDiff + densityDiff + flowDiff) / 3;
+            (temperatureDiff + densityDiff + viscosityDiff) / 3;
 
         const similarity = Math.max(0, 100 - averageDeviation);
 
         const differences = {
-            "Temperature": temperatureDiff,
-            "Density": densityDiff,
-            "Flow Time": flowDiff
+            Temperature: temperatureDiff,
+            Density: densityDiff,
+            Viscosity: viscosityDiff
         };
 
         const largestDeviation = Object.keys(differences).reduce(
@@ -177,10 +207,11 @@ function analyzeOils() {
             name: sample.name,
             temperature: sample.temperature,
             density: sample.density,
-            flow: sample.flow,
+            viscosity: sample.viscosity,
             temperatureDiff,
             densityDiff,
-            flowDiff,
+            viscosityDiff,
+            averageDeviation,
             similarity,
             largestDeviation
         };
@@ -188,19 +219,24 @@ function analyzeOils() {
 
     results.sort((a, b) => b.similarity - a.similarity);
 
+    latestResults = {
+        date: new Date().toLocaleString(),
+        oilType: document.getElementById("oilType").value,
+        reference,
+        results
+    };
+
     displayResults(results, reference);
 
     document.getElementById("results").classList.remove("hidden");
-    document.getElementById("viewResultsBtn").classList.remove("hidden");
+    document.getElementById("viewResultsBtn").classList.add("visible");
 
     document.getElementById("homeSamples").textContent = results.length;
     document.getElementById("homeBest").textContent = results[0].name;
     document.getElementById("homeScore").textContent =
         `${results[0].similarity.toFixed(2)}%`;
 
-    setTimeout(() => {
-        scrollToResults();
-    }, 100);
+    setTimeout(scrollToResults, 100);
 }
 
 function displayResults(results, reference) {
@@ -213,38 +249,19 @@ function displayResults(results, reference) {
     document.getElementById("bestSimilarity").textContent =
         `${best.similarity.toFixed(2)}%`;
 
-    const average =
+    const averageSimilarity =
         results.reduce((sum, item) => sum + item.similarity, 0) /
         results.length;
 
     document.getElementById("averageSimilarity").textContent =
-        `${average.toFixed(2)}%`;
-
-    const parameterTotals = {
-        "Temperature": 0,
-        "Density": 0,
-        "Flow Time": 0
-    };
-
-    results.forEach(item => {
-        parameterTotals["Temperature"] += item.temperatureDiff;
-        parameterTotals["Density"] += item.densityDiff;
-        parameterTotals["Flow Time"] += item.flowDiff;
-    });
-
-    const largestParameter = Object.keys(parameterTotals).reduce(
-        (a, b) => parameterTotals[a] > parameterTotals[b] ? a : b
-    );
-
-    document.getElementById("largestDeviation").textContent =
-        largestParameter;
+        `${averageSimilarity.toFixed(2)}%`;
 
     document.getElementById("closestName").textContent = best.name;
     document.getElementById("closestScore").textContent =
         `${best.similarity.toFixed(2)}%`;
 
     document.getElementById("closestDescription").textContent =
-        `${best.name} has the closest measured physical-property profile to the Original Oil reference for ${oilType}, based on temperature, density and flow time.`;
+        `${best.name} has the closest measured temperature, density and viscosity profile to the Original Oil reference for ${oilType}. This is a physical-property similarity comparison, not proof of purity.`;
 
     displayTable(results);
     displayParameterAnalysis(results);
@@ -253,7 +270,7 @@ function displayResults(results, reference) {
 
 function displayTable(results) {
     const tbody = document.getElementById("resultsTable");
-    tbody.innerHTML = "";
+    tbody.replaceChildren();
 
     results.forEach((item, index) => {
         const row = document.createElement("tr");
@@ -262,17 +279,34 @@ function displayTable(results) {
             row.className = "best";
         }
 
-        row.innerHTML = `
-            <td>${index + 1}</td>
-            <td>
-                ${item.name}
-                ${index === 0 ? "<br><small>🏆 Closest Match</small>" : ""}
-            </td>
-            <td>${item.temperatureDiff.toFixed(2)}%</td>
-            <td>${item.densityDiff.toFixed(2)}%</td>
-            <td>${item.flowDiff.toFixed(2)}%</td>
-            <td><strong>${item.similarity.toFixed(2)}%</strong></td>
-        `;
+        const values = [
+            String(index + 1),
+            item.name,
+            `${item.temperatureDiff.toFixed(2)}%`,
+            `${item.densityDiff.toFixed(2)}%`,
+            `${item.viscosityDiff.toFixed(2)}%`,
+            `${item.similarity.toFixed(2)}%`
+        ];
+
+        values.forEach((value, cellIndex) => {
+            const cell = document.createElement("td");
+
+            if (cellIndex === 1) {
+                cell.textContent = index === 0
+                    ? `${value} — Closest Match`
+                    : value;
+            } else {
+                cell.textContent = value;
+            }
+
+            if (cellIndex === 5) {
+                const strong = document.createElement("strong");
+                strong.textContent = value;
+                cell.replaceChildren(strong);
+            }
+
+            row.appendChild(cell);
+        });
 
         tbody.appendChild(row);
     });
@@ -280,47 +314,67 @@ function displayTable(results) {
 
 function displayParameterAnalysis(results) {
     const container = document.getElementById("parameterAnalysis");
-    container.innerHTML = "";
+    container.replaceChildren();
 
     results.forEach((item, index) => {
         const card = document.createElement("div");
         card.className = "parameter-card";
 
-        card.innerHTML = `
-            <div class="parameter-header">
-                <h3>${item.name}</h3>
-                <span class="rank">#${index + 1}</span>
-            </div>
+        const header = document.createElement("div");
+        header.className = "parameter-header";
 
-            <div class="parameter-row">
-                <span>Temperature difference</span>
-                <strong>${item.temperatureDiff.toFixed(2)}%</strong>
-            </div>
+        const title = document.createElement("h3");
+        title.textContent = item.name;
 
-            <div class="parameter-row">
-                <span>Density difference</span>
-                <strong>${item.densityDiff.toFixed(2)}%</strong>
-            </div>
+        const rank = document.createElement("span");
+        rank.className = "rank";
+        rank.textContent = `#${index + 1}`;
 
-            <div class="parameter-row">
-                <span>Flow-time difference</span>
-                <strong>${item.flowDiff.toFixed(2)}%</strong>
-            </div>
+        header.append(title, rank);
+        card.appendChild(header);
 
-            <div class="parameter-row">
-                <span>Similarity</span>
-                <strong>${item.similarity.toFixed(2)}%</strong>
-            </div>
+        const rows = [
+            ["Temperature difference", item.temperatureDiff],
+            ["Density difference", item.densityDiff],
+            ["Viscosity difference", item.viscosityDiff],
+            ["Similarity", item.similarity]
+        ];
 
-            <div class="progress">
-                <div class="progress-bar" style="width:${item.similarity}%"></div>
-            </div>
+        rows.forEach(([label, value]) => {
+            const row = document.createElement("div");
+            row.className = "parameter-row";
 
-            <p class="parameter-row">
-                <span>Largest deviation</span>
-                <strong>${item.largestDeviation}</strong>
-            </p>
-        `;
+            const labelSpan = document.createElement("span");
+            labelSpan.textContent = label;
+
+            const strong = document.createElement("strong");
+            strong.textContent = `${value.toFixed(2)}%`;
+
+            row.append(labelSpan, strong);
+            card.appendChild(row);
+        });
+
+        const progress = document.createElement("div");
+        progress.className = "progress";
+
+        const bar = document.createElement("div");
+        bar.className = "progress-bar";
+        bar.style.width = `${Math.min(100, item.similarity)}%`;
+
+        progress.appendChild(bar);
+        card.appendChild(progress);
+
+        const largestRow = document.createElement("div");
+        largestRow.className = "parameter-row";
+
+        const largestLabel = document.createElement("span");
+        largestLabel.textContent = "Largest deviation";
+
+        const largestValue = document.createElement("strong");
+        largestValue.textContent = item.largestDeviation;
+
+        largestRow.append(largestLabel, largestValue);
+        card.appendChild(largestRow);
 
         container.appendChild(card);
     });
@@ -332,6 +386,11 @@ function createCharts(results, reference) {
 
     const labels = results.map(item => item.name);
 
+    const commonOptions = {
+        responsive: true,
+        maintainAspectRatio: false
+    };
+
     charts.temperature = new Chart(
         document.getElementById("temperatureChart"),
         {
@@ -340,18 +399,28 @@ function createCharts(results, reference) {
                 labels,
                 datasets: [
                     {
-                        label: "Original",
+                        label: "Original Reference",
                         data: results.map(() => reference.temperature),
                         backgroundColor: "#d99a24"
                     },
                     {
-                        label: "Sample",
+                        label: "Commercial Sample",
                         data: results.map(item => item.temperature),
                         backgroundColor: "#05647a"
                     }
                 ]
             },
-            options: chartOptions("Temperature (°C)")
+            options: {
+                ...commonOptions,
+                scales: {
+                    y: {
+                        title: {
+                            display: true,
+                            text: "Temperature (°C)"
+                        }
+                    }
+                }
+            }
         }
     );
 
@@ -363,22 +432,32 @@ function createCharts(results, reference) {
                 labels,
                 datasets: [
                     {
-                        label: "Original",
+                        label: "Original Reference",
                         data: results.map(() => reference.density),
                         backgroundColor: "#d99a24"
                     },
                     {
-                        label: "Sample",
+                        label: "Commercial Sample",
                         data: results.map(item => item.density),
                         backgroundColor: "#05647a"
                     }
                 ]
             },
-            options: chartOptions("Density (g/mL)")
+            options: {
+                ...commonOptions,
+                scales: {
+                    y: {
+                        title: {
+                            display: true,
+                            text: "Density (g/mL)"
+                        }
+                    }
+                }
+            }
         }
     );
 
-    charts.flow = new Chart(
+    charts.viscosity = new Chart(
         document.getElementById("flowChart"),
         {
             type: "bar",
@@ -386,18 +465,28 @@ function createCharts(results, reference) {
                 labels,
                 datasets: [
                     {
-                        label: "Original",
-                        data: results.map(() => reference.flow),
+                        label: "Original Reference",
+                        data: results.map(() => reference.viscosity),
                         backgroundColor: "#d99a24"
                     },
                     {
-                        label: "Sample",
-                        data: results.map(item => item.flow),
+                        label: "Commercial Sample",
+                        data: results.map(item => item.viscosity),
                         backgroundColor: "#05647a"
                     }
                 ]
             },
-            options: chartOptions("Flow Time (s)")
+            options: {
+                ...commonOptions,
+                scales: {
+                    y: {
+                        title: {
+                            display: true,
+                            text: "Viscosity (mPa·s)"
+                        }
+                    }
+                }
+            }
         }
     );
 
@@ -409,15 +498,14 @@ function createCharts(results, reference) {
                 labels,
                 datasets: [
                     {
-                        label: "Similarity",
+                        label: "Similarity Score",
                         data: results.map(item => item.similarity),
                         backgroundColor: "#05647a"
                     }
                 ]
             },
             options: {
-                responsive: true,
-                maintainAspectRatio: false,
+                ...commonOptions,
                 scales: {
                     y: {
                         beginAtZero: true,
@@ -433,33 +521,17 @@ function createCharts(results, reference) {
     );
 }
 
-function chartOptions(yTitle) {
-    return {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-            y: {
-                beginAtZero: false,
-                title: {
-                    display: true,
-                    text: yTitle
-                }
-            }
-        }
-    };
-}
-
 function resetAnalysis() {
     document.getElementById("refTemp").value = "";
     document.getElementById("refDensity").value = "";
     document.getElementById("refFlow").value = "";
 
-    document.getElementById("samplesContainer").innerHTML = "";
-
+    document.getElementById("samplesContainer").replaceChildren();
     sampleCount = 0;
+    latestResults = null;
 
     document.getElementById("results").classList.add("hidden");
-    document.getElementById("viewResultsBtn").classList.add("hidden");
+    document.getElementById("viewResultsBtn").classList.remove("visible");
 
     document.getElementById("homeSamples").textContent = "0";
     document.getElementById("homeBest").textContent = "—";
@@ -467,6 +539,9 @@ function resetAnalysis() {
 
     Object.values(charts).forEach(chart => chart.destroy());
     charts = {};
+
+    document.getElementById("resultsTable").replaceChildren();
+    document.getElementById("parameterAnalysis").replaceChildren();
 
     addSample();
     addSample();
@@ -476,49 +551,81 @@ function resetAnalysis() {
 }
 
 function saveAnalysis() {
-    const data = {
-        date: new Date().toLocaleString(),
-        oilType: document.getElementById("oilType").value,
-        reference: getReferenceValues(),
-        samples: getCommercialSamples()
-    };
-
-    localStorage.setItem("oilAnalysis", JSON.stringify(data));
-
-    alert("Analysis saved successfully.");
-}
-
-function exportCSV() {
-    const rows = document.querySelectorAll("#resultsTable tr");
-
-    if (!rows.length) {
+    if (!latestResults) {
         alert("Please analyze the samples first.");
         return;
     }
 
-    let csv =
-        "Rank,Sample,Temperature Difference,Density Difference,Flow Difference,Similarity\n";
+    try {
+        const key = "oilAnalysis";
+        const saved = JSON.parse(localStorage.getItem(key) || "[]");
+        const records = Array.isArray(saved) ? saved : [saved];
 
-    rows.forEach(row => {
-        const cells = row.querySelectorAll("td");
+        records.push(latestResults);
+        localStorage.setItem(key, JSON.stringify(records));
 
-        csv += Array.from(cells)
-            .map(cell => `"${cell.innerText.replace(/\n/g, " ")}"`)
-            .join(",") + "\n";
+        alert("Analysis saved in this browser.");
+    } catch (error) {
+        alert("Unable to save the analysis. Your browser storage may be full or unavailable.");
+    }
+}
+
+function csvEscape(value) {
+    return `"${String(value).replace(/"/g, '""')}"`;
+}
+
+function exportCSV() {
+    if (!latestResults) {
+        alert("Please analyze the samples first.");
+        return;
+    }
+
+    const rows = [
+        ["Rank", "Sample", "Temperature (°C)", "Density (g/mL)",
+         "Viscosity (mPa·s)", "Temperature Difference (%)",
+         "Density Difference (%)", "Viscosity Difference (%)",
+         "Similarity (%)", "Largest Deviation"],
+
+        ...latestResults.results.map((item, index) => [
+            index + 1,
+            item.name,
+            item.temperature,
+            item.density,
+            item.viscosity,
+            item.temperatureDiff.toFixed(2),
+            item.densityDiff.toFixed(2),
+            item.viscosityDiff.toFixed(2),
+            item.similarity.toFixed(2),
+            item.largestDeviation
+        ])
+    ];
+
+    const csv = "\uFEFF" + rows
+        .map(row => row.map(csvEscape).join(","))
+        .join("\r\n");
+
+    const blob = new Blob([csv], {
+        type: "text/csv;charset=utf-8;"
     });
 
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-
     const link = document.createElement("a");
+
     link.href = url;
     link.download = "oil-analysis-results.csv";
+    document.body.appendChild(link);
     link.click();
+    link.remove();
 
     URL.revokeObjectURL(url);
 }
 
 function generateReport() {
+    if (!latestResults) {
+        alert("Please analyze the samples first.");
+        return;
+    }
+
     window.print();
 }
 
